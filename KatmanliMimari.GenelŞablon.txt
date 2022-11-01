@@ -1,0 +1,237 @@
+KATMANLI MİMARİ GENEL YAPININ OLUŞTURULMASI
+
+1- Tüm class libraryler solution a eklenir.
+	a- KatmanliMimari.Dal ( içinde otomatik oluşan class silinir )
+	b- KatmanliMimari.Core ( içinde otomatik oluşan class silinir )
+	c- KatmanliMimari.Rep ( içinde otomatik oluşan class silinir )
+	d- KatmanliMimari.Entity ( içinde otomatik oluşan class silinir )
+	e- KatmanliMimari.DTO ( içinde otomatik oluşan class silinir )
+	f- KatmanliMimari.Uow ( içinde otomatik oluşan class silinir )
+
+2- Solution a asp.net model mvc projesi eklenir
+	g- KatmanliMimari.UI
+
+3- Solution a sağ tıklanır nuget paketler toplu olarak tüm katmanlara yüklenir.
+	a- Microsoft.EntityFrameworkCore
+	b- Microsoft.EntityFrameworkCore.SqlServer
+	c- Microsoft.EntityFrameworkCore.Tools
+
+KATMANLARA VERİ GİRİŞİ
+
+1- KatmanliMimari.Dal içine MyContext ismiyle bir class ekledik.
+
+
+namespace KatmanliMimariDal
+{
+    public class MyContext:DbContext
+    {
+        public MyContext(DbContextOptions<MyContext> db): base(db)
+        {
+
+        }
+        DbSet<Personel> Personel { get; set; }
+    }
+}
+
+2- KatmanliMimari.Entity içerisine Personel ismiyle bir class ekledik
+
+namespace KatmanliMimariEntity
+{
+    public class Personel
+    {
+        [Key]
+        public int Id { get; set; }
+        public string Ad { get; set; }
+    }
+}
+
+3- KatmanliMimari.Core içerisine IBaseRepository ismiyle bir Interface ve BaseRepository ismiyle bir class eklendi.
+
+	a- IBaseRepository
+
+namespace KatmanliMimariCore
+{
+    public interface IBaseRepository<T> where T : class
+    {
+        public List<T> List();
+        public T Find(int id);
+        public T Find(string id);
+        bool Update(T entity);
+        bool Delete(T entity);
+        bool Add(T entity);
+        public DbSet<T> Set();
+    }
+}
+
+	b- BaseRepository
+
+namespace KatmanliMimariCore
+{
+    public class BaseRepository<T> : IBaseRepository<T> where T : class
+    {
+        MyContext _db;
+
+        public BaseRepository(MyContext db)
+        {
+            _db = db;
+        }
+        public bool Add(T entity)
+        {
+            try
+            {
+                Set().Add(entity);
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public bool Delete(T entity)
+        {
+            try
+            {
+                Set().Remove(entity);
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public T Find(int Id)
+        {
+            return Set().Find(Id);
+        }
+
+        public T Find(string Id)
+        {
+            return Set().Find(Id);
+        }
+
+        public List<T> List()
+        {
+            return Set().ToList();
+        }
+
+        public DbSet<T> Set()
+        {
+            return _db.Set<T>();
+        }
+
+        public bool Update(T entity)
+        {
+            try
+            {
+                Set().Update(entity);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
+4- KatmanliMimari.Rep içerisine Abstracts ve Concretes isimleriyle iki klasör eklendi. 
+Sonra Abstracts klasörünün içerisine IPersonelRep ismiyle bir interface eklendi. Daha sonra Concretes klasörünün içerisine PersonelRep ismiyle bir class eklendi.
+
+	a- IPersonelRep
+
+namespace KatmanliMimariRep.Abstracts
+{
+    public interface IPersonelRep:IBaseRepository<Personel>
+    {
+    }
+}
+
+	b- PersonelRep
+
+namespace KatmanliMimariRep.Concretes
+{
+    public class PersonelRep<T> : BaseRepository<Personel>, IPersonelRep
+    {
+        public PersonelRep(MyContext db) : base(db)
+        {
+        }
+    }
+}
+
+5- KatmanliMimari.Uow içerisine IUnitofWork ismiyle bir interface ve UnitofWork ismiyle bir class eklendi.
+
+	a- IUnitofWork
+
+namespace KatmanliMimariUow
+{
+    public interface IUnitofWork
+    {
+        IPersonelRep _personelRep { get; }
+
+        void Commit();
+    }
+}
+
+	b- UnitofWork
+
+namespace KatmanliMimariUow
+{
+    public class UnitofWork : IUnitofWork
+    {
+        MyContext _db;
+        public IPersonelRep _personelRep { get; set; }
+
+
+
+        public void Commit()
+        {
+            _db.SaveChanges();
+        }
+
+        public UnitofWork(MyContext db, IPersonelRep personelRep)
+        {
+            _db = db;
+            _personelRep = personelRep;
+        }
+    }
+}
+
+6- KatmanliMimari.UI de app json içerisine Connection string sql bağlantısı yapıldı.
+
+	a-   "ConnectionStrings": {
+    "Baglanti": "Server=YASIN;Database=KatmanliMimari2;Trusted_Connection=True;"
+  },
+
+7- KatmanliMimari.UI de program.cs içerisine gerekli eklemeler yapıldı.
+
+	a- builder.Services.AddDbContext<MyContext>(options =>
+         options.UseSqlServer(builder.Configuration.GetConnectionString("Baglanti")));
+	   builder.Services.AddScoped<IPersonelRep, PersonelRep<Personel>>();
+         builder.Services.AddScoped<IUnitofWork, UnitofWork>();
+
+8- Migration yapıldı.
+
+   ÖnemliNot!!!!!! migration yapılırken default proje olarak dbcontext bağlantısının yapıldığı katman seçildi.
+
+9- KatmanliMimari.UI de controller içinde Personel listesini gösteren View yaratıldı.
+
+	a- namespace KatmanliMimariUI.Controllers
+{
+    public class PersonelController : Controller
+    {
+        private readonly IUnitofWork _uw;
+        public PersonelController(IUnitofWork uw)
+        {
+            _uw = uw;
+        }
+        public IActionResult List()
+        {
+            var ls = _uw._personelRep.List();
+            return View(ls);
+        }
+    }
+}
+ 
